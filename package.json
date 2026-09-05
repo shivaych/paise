@@ -1,0 +1,33 @@
+{
+  "name": "paise",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A hard spending allowance for AI agents. HTTP 402 micropayments with bank-enforced budget caps.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "providers": "tsx --env-file-if-exists=.env src/providers/server.ts",
+    "dashboard": "tsx --env-file-if-exists=.env src/dashboard/server.ts",
+    "bench": "tsx --env-file-if-exists=.env src/bench/run.ts",
+    "topup:link": "tsx --env-file-if-exists=.env scripts/topup-link.ts",
+    "diagnose": "tsx --env-file-if-exists=.env scripts/diagnose.ts",
+    "check:gemini": "tsx --env-file-if-exists=.env scripts/check-gemini.ts",
+    "check:razorpay": "tsx --env-file-if-exists=.env scripts/check-razorpay.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "razorpay": "^2.9.6"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
