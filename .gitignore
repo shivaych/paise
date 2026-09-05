@@ -6,3 +6,6 @@ dist/
 .DS_Store
 data/*.jsonl
 bench-results/
+
+# Presenter notes — kept local, deliberately not published
+docs/pitch-script.md
