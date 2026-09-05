@@ -19,12 +19,12 @@ import { HOUR, systemClock } from '../core/clock.js';
 import { isMainModule } from '../core/main.js';
 import { isPaiseError, type ErrorCode } from '../core/errors.js';
 import { Ledger } from '../core/ledger.js';
-import { type Micros, ZERO, format, micros } from '../core/money.js';
+import { type Micros, ZERO, format, micros, withToleranceBps } from '../core/money.js';
 import { PolicyEngine, windowMs } from '../core/policy.js';
 import { HmacSigner } from '../core/signer.js';
 import type { Receipt, SpendCap } from '../core/types.js';
 import { DEMO_POLICY, DEMO_TOPUP, SIGNING_SECRET } from '../config.js';
-import { FLEET, type ProviderSpec } from '../providers/fleet.js';
+import { FLEET, attemptsToCheat, type ProviderSpec } from '../providers/fleet.js';
 import { startProviders } from '../providers/server.js';
 import { PaidClient } from '../x402/client.js';
 
@@ -40,6 +40,8 @@ interface Outcome {
   readonly index: number;
   readonly provider: string;
   readonly hostile: boolean;
+  /** Provider lies about the price, as opposed to merely being unreliable. */
+  readonly cheats: boolean;
   readonly status: 'served-free' | 'paid' | 'refused-policy' | 'refused-hostile' | 'http-error';
   readonly cost: Micros;
   readonly code?: ErrorCode;
@@ -164,6 +166,7 @@ export async function runBenchmark(opts: BenchOptions = {}) {
           index,
           provider: spec.id,
           hostile: spec.hostile,
+          cheats: attemptsToCheat(spec),
           status: result.paid ? 'paid' : result.ok ? 'served-free' : 'http-error',
           cost: result.cost,
           durationMs: result.durationMs,
@@ -174,6 +177,7 @@ export async function runBenchmark(opts: BenchOptions = {}) {
             index,
             provider: spec.id,
             hostile: spec.hostile,
+            cheats: attemptsToCheat(spec),
             status: POLICY_CODES.has(e.code) ? 'refused-policy' : 'refused-hostile',
             cost: ZERO,
             code: e.code,
@@ -185,6 +189,7 @@ export async function runBenchmark(opts: BenchOptions = {}) {
             index,
             provider: spec.id,
             hostile: spec.hostile,
+            cheats: attemptsToCheat(spec),
             status: 'http-error',
             cost: ZERO,
             message: e instanceof Error ? e.message : String(e),
@@ -235,7 +240,24 @@ function buildReport(input: {
   }
 
   const perCallOverPolicy = receipts.filter((r) => r.settledAmount > DEMO_POLICY.perCallLimit);
-  const hostilePaid = outcomes.filter((o) => o.hostile && o.status === 'paid');
+
+  /**
+   * The real invariant, read straight off the receipt log: nothing was ever
+   * settled for more than it was quoted (plus any configured tolerance).
+   *
+   * This is behaviour-independent — it does not care how we classified the
+   * provider, only what we actually paid — which makes it the honest check.
+   */
+  const overchargesPaid = receipts.filter(
+    (r) => r.settledAmount > withToleranceBps(r.quotedAmount, DEMO_POLICY.quoteToleranceBps),
+  );
+
+  /**
+   * Payments to providers that lie about price. Being paid by `flaky` or `slow`
+   * is not a defect: they are adversarial about *availability*, but when they
+   * do serve they charge exactly what they quoted, and paying is correct.
+   */
+  const cheatsPaid = outcomes.filter((o) => o.cheats && o.status === 'paid');
   const latencies = outcomes.map((o) => o.durationMs).sort((a, b) => a - b);
 
   return {
@@ -269,8 +291,14 @@ function buildReport(input: {
       /** The headline. Independently recomputed from receipts, not from the engine. */
       totalOverspend: micros(capAudit.reduce((acc, c) => acc + c.overspend, 0)),
       perCallBreaches: perCallOverPolicy.length,
-      /** Money that reached a provider that tried to cheat. Must be zero. */
-      paidToHostileProviders: hostilePaid.length,
+      /** Receipts settled above their own quote. Must be zero. */
+      overchargesPaid: overchargesPaid.length,
+      /** Money that reached a provider that lied about price. Must be zero. */
+      paidToCheatingProviders: cheatsPaid.length,
+      /** Informational: honest payments to providers that are merely unreliable. */
+      paidToUnreliableProviders: outcomes.filter(
+        (o) => o.hostile && !o.cheats && o.status === 'paid',
+      ).length,
     },
     audit: {
       receipts: receipts.length,
@@ -329,8 +357,16 @@ function printReport(r: Report): void {
   line('overspend', `${format(r.budget.totalOverspend)}  ${pass(r.budget.totalOverspend === 0)}`);
   line('per-call breaches', `${r.budget.perCallBreaches}  ${pass(r.budget.perCallBreaches === 0)}`);
   line(
-    'paid to hostile providers',
-    `${r.budget.paidToHostileProviders}  ${pass(r.budget.paidToHostileProviders === 0)}`,
+    'overcharges paid',
+    `${r.budget.overchargesPaid}  ${pass(r.budget.overchargesPaid === 0)}`,
+  );
+  line(
+    'paid to cheating providers',
+    `${r.budget.paidToCheatingProviders}  ${pass(r.budget.paidToCheatingProviders === 0)}`,
+  );
+  line(
+    'honest payments to flaky APIs',
+    `${r.budget.paidToUnreliableProviders}  (expected, not a defect)`,
   );
 
   console.log('\n\x1b[1mAudit trail\x1b[0m');
@@ -343,7 +379,8 @@ function printReport(r: Report): void {
   const allPass =
     r.budget.totalOverspend === 0 &&
     r.budget.perCallBreaches === 0 &&
-    r.budget.paidToHostileProviders === 0 &&
+    r.budget.overchargesPaid === 0 &&
+    r.budget.paidToCheatingProviders === 0 &&
     r.audit.chain.ok &&
     r.audit.doubleEntry.ok &&
     r.audit.leakedHolds === 0;

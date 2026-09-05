@@ -67,30 +67,42 @@ honestly-priced and actively hostile APIs:
 ```
 Throughput
   requests                           100
-  wall clock                         1383 ms
-  throughput                         72.31 req/s
-  latency p50 / p95                  6 ms / 1214 ms
+  wall clock                         1355 ms
+  throughput                         73.8 req/s
+  latency p50 / p95                  5 ms / 1205 ms
 
 Outcomes
   served free                        25
-  paid successfully                  41
-  refused — budget policy            12
-  refused — provider misbehaviour    18
-  http errors                        4
+  paid successfully                  42
+  refused — budget policy            14
+  refused — provider misbehaviour    17
+  http errors                        2
 
 Budget adherence
-  total spent                        ₹13.40
-  cap: hour                          peak ₹13.40 of ₹15.00 (89.3%)
+  total spent                        ₹13.70
+  cap: hour                          peak ₹13.70 of ₹15.00 (91.3%)
   overspend                          ₹0.00   PASS
   per-call breaches                  0       PASS
-  paid to hostile providers          0       PASS
+  overcharges paid                   0       PASS
+  paid to cheating providers         0       PASS
+  honest payments to flaky APIs      2       (expected, not a defect)
 
 Audit trail
-  receipts written                   41
+  receipts written                   42
   hash chain verified                PASS
   double-entry balanced              PASS
   leaked holds                       0       PASS
 ```
+
+`overcharges paid` is the load-bearing one: it walks the receipt log and counts
+anything settled for more than its own quote. It does not depend on how a
+provider was labelled, only on what was actually paid.
+
+`honest payments to flaky APIs` is deliberately *not* a failure. The flaky
+provider takes an authorization and then 503s 60% of the time — adversarial
+about availability — but when it does serve, it charges exactly what it quoted.
+Paying it is the correct outcome, and an earlier version of this benchmark
+wrongly flagged it.
 
 Overspend is **recomputed independently from the receipt log** with a sliding
 window (`maxWindowSpend` in `src/bench/run.ts`) rather than read back from the

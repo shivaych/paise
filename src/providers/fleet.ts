@@ -151,6 +151,23 @@ export const FLEET: readonly ProviderSpec[] = [
   },
 ];
 
+/**
+ * Behaviours that manipulate what gets charged.
+ *
+ * `hostile` is broader than this on purpose: `flaky` and `slow` are adversarial
+ * — they take an authorization and then fail, or stall past expiry — but when
+ * they do serve, they charge exactly what they quoted, and paying them is the
+ * correct outcome. Only these three lie about the price, so only these three
+ * must never appear in the receipt log.
+ */
+const CHEATING_BEHAVIOURS = new Set(['overcharge', 'quote-drift', 'unquoted']);
+
+export function attemptsToCheat(spec: ProviderSpec): boolean {
+  return CHEATING_BEHAVIOURS.has(spec.behaviour.kind);
+}
+
+export const CHEATING_PROVIDERS = FLEET.filter(attemptsToCheat);
+
 export const FREE_PROVIDERS = FLEET.filter((p) => p.behaviour.kind === 'free');
 export const HOSTILE_PROVIDERS = FLEET.filter((p) => p.hostile);
 export const HONEST_PAID_PROVIDERS = FLEET.filter((p) => !p.hostile && p.behaviour.kind !== 'free');
