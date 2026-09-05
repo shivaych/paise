@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>paise — agent budget console</title>
+    <style>
+      :root {
+        --bg: #0b0e14;
+        --panel: #121722;
+        --line: #1e2634;
+        --text: #e6edf3;
+        --dim: #7d8899;
+        --ok: #3fb950;
+        --warn: #d29922;
+        --bad: #f85149;
+        --accent: #58a6ff;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      header {
+        padding: 18px 24px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+      h1 span { color: var(--dim); font-weight: 400; }
+      .grow { flex: 1; }
+      button {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--line);
+        padding: 7px 13px;
+        border-radius: 7px;
+        cursor: pointer;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      button:hover { border-color: var(--accent); color: var(--accent); }
+      button.danger:hover { border-color: var(--bad); color: var(--bad); }
+      main {
+        display: grid;
+        grid-template-columns: minmax(320px, 1fr) minmax(380px, 1.2fr);
+        gap: 16px;
+        padding: 16px 24px 40px;
+        align-items: start;
+      }
+      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--dim);
+        margin: 0 0 14px;
+        font-weight: 600;
+      }
+      .cap { margin-bottom: 16px; }
+      .cap-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+      .cap-head b { font-family: var(--mono); font-weight: 500; }
+      .bar {
+        height: 9px;
+        background: #0a0d13;
+        border-radius: 5px;
+        overflow: hidden;
+        display: flex;
+      }
+      .bar i { display: block; height: 100%; transition: width 0.35s ease; }
+      .bar .spent { background: var(--accent); }
+      .bar .held { background: var(--warn); opacity: 0.75; }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 4px;
+      }
+      .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+      .stat label { display: block; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.07em; }
+      .stat b { font-family: var(--mono); font-size: 16px; font-weight: 500; }
+      .feed { max-height: 460px; overflow-y: auto; margin: -4px -4px 0; padding: 4px; }
+      .row {
+        display: flex;
+        gap: 10px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        border-left: 2px solid transparent;
+        font-size: 12.5px;
+        align-items: baseline;
+      }
+      .row + .row { margin-top: 2px; }
+      .row time { font-family: var(--mono); color: var(--dim); font-size: 11px; flex: none; }
+      .row .msg { flex: 1; min-width: 0; }
+      .row.ok { border-left-color: var(--ok); background: rgba(63, 185, 80, 0.06); }
+      .row.refused { border-left-color: var(--warn); background: rgba(210, 153, 34, 0.06); }
+      .row.attack { border-left-color: var(--bad); background: rgba(248, 81, 73, 0.09); }
+      .row.info { border-left-color: var(--line); }
+      .tag {
+        font-family: var(--mono);
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        color: var(--dim);
+        flex: none;
+      }
+      .row.attack .tag { color: var(--bad); border-color: rgba(248, 81, 73, 0.4); }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th {
+        text-align: left;
+        color: var(--dim);
+        font-weight: 500;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      td { padding: 6px 0; border-bottom: 1px solid rgba(30, 38, 52, 0.5); font-family: var(--mono); }
+      td.num { text-align: right; }
+      .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid; }
+      .pill.good { color: var(--ok); border-color: rgba(63, 185, 80, 0.35); }
+      .pill.bad { color: var(--bad); border-color: rgba(248, 81, 73, 0.35); }
+      .muted { color: var(--dim); }
+      .hostile { color: var(--bad); }
+      .empty { color: var(--dim); font-size: 13px; padding: 20px 0; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>paise <span>— autonomous agent budget console</span></h1>
+      <div class="grow"></div>
+      <button onclick="run(10)">Run 10 requests</button>
+      <button onclick="run(50)">Run 50</button>
+      <button class="danger" onclick="attack()">Attack: overcharge ×20</button>
+      <button onclick="post('/api/settle')">Settle batch</button>
+      <button onclick="post('/api/topup')">Top up</button>
+    </header>
+
+    <main>
+      <div>
+        <section style="margin-bottom: 16px">
+          <h2>Budget</h2>
+          <div id="caps"></div>
+          <div class="stat-grid" id="stats"></div>
+        </section>
+
+        <section style="margin-bottom: 16px">
+          <h2>Mandate — bank-enforced ceiling</h2>
+          <div id="mandate" class="muted">…</div>
+        </section>
+
+        <section>
+          <h2>Audit trail</h2>
+          <div id="audit"></div>
+          <table style="margin-top: 12px">
+            <thead>
+              <tr>
+                <th>#</th><th>Provider</th><th class="num">Quoted</th>
+                <th class="num">Paid</th><th>Hash</th>
+              </tr>
+            </thead>
+            <tbody id="receipts"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <div>
+        <section style="margin-bottom: 16px">
+          <h2>Live decisions</h2>
+          <div class="feed" id="feed"></div>
+        </section>
+
+        <section>
+          <h2>Provider fleet</h2>
+          <table>
+            <thead><tr><th>Endpoint</th><th class="num">Price</th><th>Behaviour</th></tr></thead>
+            <tbody id="fleet"></tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const M = 1000000;
+      const inr = (u) => {
+        const neg = u < 0, a = Math.abs(u);
+        let f = String(a % M).padStart(6, '0').replace(/0+$/, '');
+        if (f.length < 2) f = f.padEnd(2, '0');
+        return (neg ? '-' : '') + '₹' + Math.floor(a / M).toLocaleString('en-IN') + '.' + f;
+      };
+      const time = (ms) => new Date(ms).toLocaleTimeString('en-IN', { hour12: false });
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+      async function post(path, body) {
+        await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body ?? {}),
+        });
+        refresh();
+      }
+      const run = (count) => post('/api/run', { count });
+      const attack = () => post('/api/run', { count: 6, provider: 'gouger' });
+
+      function render(s) {
+        document.getElementById('caps').innerHTML = s.status.caps.map((c) => {
+          const spentPct = Math.min(100, (c.spent / c.limit) * 100);
+          const heldPct = Math.min(100 - spentPct, (c.held / c.limit) * 100);
+          return `<div class="cap">
+            <div class="cap-head">
+              <span class="muted">per ${c.window}</span>
+              <b>${inr(c.spent)} <span class="muted">/ ${inr(c.limit)}</span></b>
+            </div>
+            <div class="bar">
+              <i class="spent" style="width:${spentPct}%"></i>
+              <i class="held" style="width:${heldPct}%"></i>
+            </div>
+          </div>`;
+        }).join('');
+
+        document.getElementById('stats').innerHTML = [
+          ['Balance', inr(s.status.balance)],
+          ['Available', inr(s.status.available)],
+          ['On hold', inr(s.status.totalHeld)],
+          ['Total spent', inr(s.status.totalSpent)],
+          ['Per-call cap', inr(s.status.perCallLimit)],
+          ['Receipts', s.status.receiptCount],
+        ].map(([l, v]) => `<div class="stat"><label>${l}</label><b>${v}</b></div>`).join('');
+
+        const m = s.mandate;
+        document.getElementById('mandate').innerHTML =
+          `<div style="font-size:13px">
+            <div>Ceiling per debit <b style="font-family:var(--mono)">${inr(m.maxAmountPerDebit)}</b></div>
+            <div class="muted" style="margin-top:6px;font-size:12px">
+              ${esc(m.mandateId)} · ${esc(m.status)} · ${esc(m.rail)} rail<br>
+              Enforced by the rail, not by this application. No code path here can raise it.
+            </div>
+          </div>`;
+
+        const chainOk = s.audit.chain.ok, deOk = s.audit.doubleEntry.ok;
+        document.getElementById('audit').innerHTML =
+          `<span class="pill ${chainOk ? 'good' : 'bad'}">hash chain ${chainOk ? 'verified' : 'BROKEN'}</span>
+           <span class="pill ${deOk ? 'good' : 'bad'}" style="margin-left:6px">books ${deOk ? 'balanced' : 'DRIFTED'}</span>`;
+
+        document.getElementById('receipts').innerHTML = s.receipts.length
+          ? s.receipts.map((r) => `<tr>
+              <td class="muted">${r.seq}</td>
+              <td>${esc(r.provider)}</td>
+              <td class="num muted">${inr(r.quoted)}</td>
+              <td class="num">${inr(r.settled)}</td>
+              <td class="muted" title="${esc(r.railRef ?? 'not yet settled to rail')}">${esc(r.hash)}…</td>
+            </tr>`).join('')
+          : '<tr><td colspan="5" class="empty">No payments yet</td></tr>';
+
+        document.getElementById('feed').innerHTML = s.feed.length
+          ? s.feed.map((e) => `<div class="row ${e.severity}">
+              <time>${time(e.at)}</time>
+              <span class="tag">${esc(e.code ?? e.kind)}</span>
+              <span class="msg">${esc(e.message)}</span>
+            </div>`).join('')
+          : '<div class="empty">Idle — run some requests</div>';
+
+        document.getElementById('fleet').innerHTML = s.fleet.map((p) => `<tr>
+          <td class="${p.hostile ? 'hostile' : ''}">${p.hostile ? '☠ ' : ''}${esc(p.path)}</td>
+          <td class="num">${p.price ? inr(p.price) : '<span class="muted">free</span>'}</td>
+          <td class="muted" style="font-family:system-ui;font-size:11.5px">${esc(p.label)}</td>
+        </tr>`).join('');
+      }
+
+      async function refresh() {
+        try {
+          render(await (await fetch('/api/state')).json());
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      refresh();
+      setInterval(refresh, 900);
+    </script>
+  </body>
+</html>
